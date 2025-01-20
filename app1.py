@@ -1,4 +1,3 @@
-# hello
 import flet as ft
 from login import LoginPage
 
@@ -14,6 +13,22 @@ class Task(ft.Column):
         )
         self.edit_name = ft.TextField(expand=1, border_color=ft.Colors.GREY)
 
+        self.popup_menu = ft.PopupMenuButton(
+            icon=ft.Icons.MORE_VERT,
+            items=[
+                ft.PopupMenuItem(
+                    text="Edit",
+                    on_click=self.edit_clicked,
+                    icon=ft.Icons.CREATE_OUTLINED
+                ),
+                ft.PopupMenuItem(
+                    text="Delete",
+                    on_click=self.delete_clicked,
+                    icon=ft.Icons.DELETE_OUTLINE
+                )
+            ]
+        )
+
         self.display_view = ft.Row(
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -21,20 +36,7 @@ class Task(ft.Column):
                 self.display_task,
                 ft.Row(
                     spacing=10,
-                    controls=[
-                        ft.IconButton(
-                            icon=ft.Icons.CREATE_OUTLINED,
-                            icon_color=ft.Colors.ORANGE_ACCENT,
-                            tooltip="Edit To-Do",
-                            on_click=self.edit_clicked,
-                        ),
-                        ft.IconButton(
-                            ft.Icons.DELETE_OUTLINE,
-                            icon_color=ft.Colors.ORANGE_ACCENT,
-                            tooltip="Delete To-Do",
-                            on_click=self.delete_clicked,
-                        ),
-                    ],
+                    controls=[self.popup_menu],
                 ),
             ],
         )
@@ -53,6 +55,7 @@ class Task(ft.Column):
                 ),
             ],
         )
+
         self.controls = [self.display_view, self.edit_view]
 
     def edit_clicked(self, e):
@@ -76,7 +79,6 @@ class Task(ft.Column):
 
 
 class TodoApp(ft.Column):
-
     def __init__(self):
         super().__init__()
         self.new_task = ft.TextField(
@@ -96,14 +98,11 @@ class TodoApp(ft.Column):
 
         self.width = 500
         self.controls = [
-            # Header
             ft.Row(
                 [ft.Text(value="To-Do List", theme_style=ft.TextThemeStyle.HEADLINE_MEDIUM, color=ft.Colors.PURPLE)],
                 alignment=ft.MainAxisAlignment.CENTER,
             ),
-            # Gap between header and TextField
             ft.Container(height=20),
-            # New task input field wrapped in Container for padding
             ft.Container(
                 ft.Row(
                     controls=[
@@ -116,7 +115,7 @@ class TodoApp(ft.Column):
                     ],
                     alignment=ft.MainAxisAlignment.CENTER
                 ),
-                padding=ft.Padding(top=20, left=20, right=20, bottom=20)  # Correct padding using Container
+                padding=ft.Padding(top=20, left=20, right=20, bottom=20)
             ),
             ft.Column(
                 spacing=25,
@@ -133,7 +132,7 @@ class TodoApp(ft.Column):
                                 style=ft.ButtonStyle(
                                     padding=ft.Padding(left=20, right=20, top=10, bottom=10),
                                     bgcolor=ft.Colors.ORANGE_ACCENT,
-                                    color=ft.Colors.BLACK  # Set text color to black
+                                    color=ft.Colors.BLACK
                                 )
                             ),
                         ],
@@ -141,7 +140,7 @@ class TodoApp(ft.Column):
                 ],
             ),
         ]
-        self.padding = ft.Padding(20, 20, 20, 20)  # Correct padding with all sides specified
+        self.padding = ft.Padding(20, 20, 20, 20)
         self.bgcolor = ft.Colors.LIGHT_BLUE_50
 
     def add_clicked(self, e):
@@ -193,4 +192,4 @@ def main(page: ft.Page):
     page.add(LoginPage(on_login_success=on_login_success))
 
 
-ft.app(main)
+ft.app(main)    
