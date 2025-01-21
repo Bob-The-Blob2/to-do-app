@@ -47,7 +47,6 @@ class Task(ft.Column):
                 ),
             ],
         )
-
         
 
         self.edit_view = ft.Row(
