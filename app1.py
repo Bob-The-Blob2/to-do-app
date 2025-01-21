@@ -1,5 +1,7 @@
 import flet as ft
 from login import LoginPage
+from openai import OpenAI
+import os
 
 class Task(ft.Column):
     def __init__(self, task_name, task_status_change, task_delete):
@@ -25,7 +27,12 @@ class Task(ft.Column):
                     text="Delete",
                     on_click=self.delete_clicked,
                     icon=ft.Icons.DELETE_OUTLINE
-                )
+                ),
+                ft.PopupMenuItem(
+                    text = "Create schedule",
+                    on_click = self.create_plan,
+                    icon = ft.Icons.DATE_RANGE
+                ),
             ]
         )
 
@@ -40,6 +47,8 @@ class Task(ft.Column):
                 ),
             ],
         )
+
+        
 
         self.edit_view = ft.Row(
             visible=False,
@@ -76,6 +85,27 @@ class Task(ft.Column):
 
     def delete_clicked(self, e):
         self.task_delete(self)
+    
+    def create_plan(self, e):
+        API_KEY = os.environ.get('OPENAI_API_KEY', "dont-know")
+        MODEL = "gpt-3.5-turbo"
+
+        client = OpenAI(api_key=API_KEY)
+        
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant. Create a detailed plan to achieve the given goal, breaking it down into actionable steps with a timeline. Make sure the plan is practical and achievable, including daily or weekly tasks, milestones, and any additional tips or resources that might be helpful. Give me the output in JSON format with goal as a key and the plan/steps as sub-keys."},
+                    {"role": "user", "content": self.task_name}
+                ]
+            )
+            print("Assistant: " + response.choices[0].message.content)
+
+        except Exception as ex:
+            print(f"Error while generating plan")
+
+
 
 
 class TodoApp(ft.Column):
