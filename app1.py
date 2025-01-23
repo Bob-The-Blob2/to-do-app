@@ -1,7 +1,8 @@
 import flet as ft
-from login import LoginPage
 from openai import OpenAI
 import os
+from login import LoginPage
+
 
 class Task(ft.Column):
     def __init__(self, task_name, task_status_change, task_delete):
@@ -10,6 +11,7 @@ class Task(ft.Column):
         self.task_name = task_name
         self.task_status_change = task_status_change
         self.task_delete = task_delete
+        self.response_var = "no plan"
         self.display_task = ft.Checkbox(
             value=False, label=self.task_name, on_change=self.status_changed, active_color=ft.Colors.PURPLE_ACCENT
         )
@@ -29,11 +31,15 @@ class Task(ft.Column):
                     icon=ft.Icons.DELETE_OUTLINE
                 ),
                 ft.PopupMenuItem(
-                    text = "Create schedule",
-                    on_click = self.create_plan,
-                    icon = ft.Icons.DATE_RANGE
+                    text="Create schedule",
+                    on_click=self.create_plan,
+                    icon=ft.Icons.DATE_RANGE
                 ),
             ]
+        )
+        self.expansion_tile = ft.ExpansionTile(
+            title=ft.Text("show plan"),
+            controls=[ft.Text(f"{self.response_var}")]
         )
 
         self.display_view = ft.Row(
@@ -47,7 +53,6 @@ class Task(ft.Column):
                 ),
             ],
         )
-        
 
         self.edit_view = ft.Row(
             visible=False,
@@ -64,7 +69,7 @@ class Task(ft.Column):
             ],
         )
 
-        self.controls = [self.display_view, self.edit_view]
+        self.controls = [self.display_view, self.edit_view, self.expansion_tile]
 
     def edit_clicked(self, e):
         self.edit_name.value = self.display_task.label
@@ -84,27 +89,32 @@ class Task(ft.Column):
 
     def delete_clicked(self, e):
         self.task_delete(self)
-    
+
     def create_plan(self, e):
         API_KEY = os.environ.get('OPENAI_API_KEY', "dont-know")
         MODEL = "gpt-3.5-turbo"
 
         client = OpenAI(api_key=API_KEY)
-        
+
         try:
             response = client.chat.completions.create(
                 model=MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Create a detailed plan to achieve the given goal, breaking it down into actionable steps with a timeline. Make sure the plan is practical and achievable, including daily or weekly tasks, milestones, and any additional tips or resources that might be helpful. Give me the output in JSON format with goal as a key and the plan/steps as sub-keys."},
+                    {"role": "system", "content": "You are a helpful assistant. Create a detailed plan to achieve the given goal, breaking it down into actionable steps with a timeline. Make sure the plan is practical and achievable, including daily or weekly tasks, milestones, and any additional tips or resources that might be helpful. Give me the output in YAML format with goal as a key and the plan/steps as sub-keys."},
                     {"role": "user", "content": self.task_name}
                 ]
             )
-            print("Assistant: " + response.choices[0].message.content)
+            self.response_var = response.choices[0].message.content
+
+            # Update the display after receiving the response
+            self.expansion_tile.controls = [ft.Text(f"{self.response_var}")]
+            self.update()
 
         except Exception as ex:
-            print(f"Error while generating plan")
-
-
+            print(f"Error while generating plan: {ex}")
+            self.response_var = "Error generating plan"
+            self.expansion_tile.controls = [ft.Text(f"{self.response_var}")]
+            self.update()
 
 
 class TodoApp(ft.Column):
@@ -221,4 +231,4 @@ def main(page: ft.Page):
     page.add(LoginPage(on_login_success=on_login_success))
 
 
-ft.app(main)    
+ft.app(main)
