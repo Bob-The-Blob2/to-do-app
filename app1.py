@@ -1,8 +1,7 @@
 import flet as ft
-from openai import OpenAI
+import openai
 import os
 from login import LoginPage
-from daily_tasks import daily_tasks
 
 class Task(ft.Column):
     def __init__(self, task_name, task_status_change, task_delete):
@@ -29,7 +28,17 @@ class Task(ft.Column):
                     on_click=self.delete_clicked,
                     icon=ft.Icons.DELETE_OUTLINE
                 ),
+                ft.PopupMenuItem(
+                    text="Create schedule",
+                    on_click=self.create_plan,
+                    icon=ft.Icons.DATE_RANGE
+                ),
             ]
+        )
+
+        self.expansion_tile = ft.ExpansionTile(
+            title=ft.Text("show plan"),
+            controls=[ft.Text("No plan available yet.")]
         )
 
         self.display_view = ft.Row(
@@ -59,7 +68,7 @@ class Task(ft.Column):
             ],
         )
 
-        self.controls = [self.display_view, self.edit_view]
+        self.controls = [self.display_view, self.edit_view, self.expansion_tile]
 
     def edit_clicked(self, e):
         self.edit_name.value = self.display_task.label
@@ -80,6 +89,31 @@ class Task(ft.Column):
     def delete_clicked(self, e):
         self.task_delete(self)
 
+    def create_plan(self, e):
+        API_KEY = os.environ.get('OPENAI_API_KEY', "dont-know")
+        MODEL = "gpt-3.5-turbo"
+
+        openai.api_key = API_KEY  # Set the API key for OpenAI
+
+        try:
+            response = openai.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant. Create a detailed plan to achieve the given goal, breaking it down into actionable steps with a timeline. Make sure the plan is practical and achievable, including daily or weekly tasks, milestones, and any additional tips or resources that might be helpful. Give me the output in YAML format with goal as a key and the plan/steps as sub-keys."},
+                    {"role": "user", "content": self.task_name}
+                ]
+            )
+            self.response_var = response.choices[0].message.content
+
+            # Update the display after receiving the response
+            self.expansion_tile.controls = [ft.Text(f"{self.response_var}")]
+            self.update()
+
+        except Exception as ex:
+            print(f"Error while generating plan: {ex}")
+            self.response_var = "Error generating plan"
+            self.expansion_tile.controls = [ft.Text(f"{self.response_var}")]
+            self.update()
 
 class DailyTasksApp(ft.Column):
     def __init__(self, page):
@@ -135,7 +169,6 @@ class DailyTasksApp(ft.Column):
         self.tasks.controls.remove(task)
         self.update()
 
-
 def daily_tasks(page: ft.Page):
     page.title = "Daily Tasks"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
@@ -143,13 +176,11 @@ def daily_tasks(page: ft.Page):
 
     page.add(DailyTasksApp(page))
 
-
 class TodoApp(ft.Column):
     def __init__(self, drawer_button, drawer, page):
         super().__init__()
 
         self.page = page
-
         self.drawer_button = drawer_button
         self.drawer = drawer
 
@@ -242,13 +273,12 @@ class TodoApp(ft.Column):
         for task in self.tasks.controls:
             task.visible = (
                 status == "All"
-                or (status == "Active" and task.completed == False)
+                or (status == "Active" and not task.completed)
                 or (status == "Completed" and task.completed)
             )
             if not task.completed:
                 count += 1
         self.items_left.value = f"{count} active item(s) left"
-
 
 def main(page: ft.Page):
     page.title = "ToDo App"
