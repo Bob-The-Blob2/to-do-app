@@ -2,7 +2,7 @@ import flet as ft
 from openai import OpenAI
 import os
 from login import LoginPage
-
+from daily_tasks import daily_tasks
 
 class Task(ft.Column):
     def __init__(self, task_name, task_status_change, task_delete):
@@ -11,7 +11,6 @@ class Task(ft.Column):
         self.task_name = task_name
         self.task_status_change = task_status_change
         self.task_delete = task_delete
-        self.response_var = "no plan"
         self.display_task = ft.Checkbox(
             value=False, label=self.task_name, on_change=self.status_changed, active_color=ft.Colors.PURPLE_ACCENT
         )
@@ -30,16 +29,7 @@ class Task(ft.Column):
                     on_click=self.delete_clicked,
                     icon=ft.Icons.DELETE_OUTLINE
                 ),
-                ft.PopupMenuItem(
-                    text="Create schedule",
-                    on_click=self.create_plan,
-                    icon=ft.Icons.DATE_RANGE
-                ),
             ]
-        )
-        self.expansion_tile = ft.ExpansionTile(
-            title=ft.Text("show plan"),
-            controls=[ft.Text(f"{self.response_var}")]
         )
 
         self.display_view = ft.Row(
@@ -69,7 +59,7 @@ class Task(ft.Column):
             ],
         )
 
-        self.controls = [self.display_view, self.edit_view, self.expansion_tile]
+        self.controls = [self.display_view, self.edit_view]
 
     def edit_clicked(self, e):
         self.edit_name.value = self.display_task.label
@@ -90,36 +80,79 @@ class Task(ft.Column):
     def delete_clicked(self, e):
         self.task_delete(self)
 
-    def create_plan(self, e):
-        API_KEY = os.environ.get('OPENAI_API_KEY', "dont-know")
-        MODEL = "gpt-3.5-turbo"
 
-        client = OpenAI(api_key=API_KEY)
+class DailyTasksApp(ft.Column):
+    def __init__(self, page):
+        super().__init__()
 
-        try:
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Create a detailed plan to achieve the given goal, breaking it down into actionable steps with a timeline. Make sure the plan is practical and achievable, including daily or weekly tasks, milestones, and any additional tips or resources that might be helpful. Give me the output in YAML format with goal as a key and the plan/steps as sub-keys."},
-                    {"role": "user", "content": self.task_name}
-                ]
-            )
-            self.response_var = response.choices[0].message.content
+        self.page = page
+        self.new_task = ft.TextField(
+            hint_text="What needs to be done today?", on_submit=self.add_clicked, expand=True,
+            border_color=ft.Colors.GREY
+        )
+        self.tasks = ft.Column()
 
-            # Update the display after receiving the response
-            self.expansion_tile.controls = [ft.Text(f"{self.response_var}")]
+        self.controls = [
+            ft.Row(
+                [ft.Text(value="Daily Tasks", theme_style=ft.TextThemeStyle.HEADLINE_MEDIUM, color=ft.Colors.PURPLE)],
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+            ft.Container(height=20),
+            ft.Row(
+                controls=[
+                    self.new_task,
+                    ft.FloatingActionButton(
+                        icon=ft.Icons.ADD,
+                        on_click=self.add_clicked,
+                        bgcolor='#ffa028',
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START
+            ),
+            ft.Column(
+                spacing=25,
+                controls=[
+                    self.tasks,
+                ],
+            ),
+        ]
+        self.width = 500
+        self.padding = ft.Padding(20, 20, 20, 20)
+        self.bgcolor = ft.Colors.LIGHT_BLUE_50
+
+    def add_clicked(self, e):
+        if self.new_task.value:
+            task = Task(self.new_task.value, self.task_status_change, self.task_delete)
+            self.tasks.controls.append(task)
+            self.new_task.value = ""
+            self.new_task.focus()
             self.update()
 
-        except Exception as ex:
-            print(f"Error while generating plan: {ex}")
-            self.response_var = "Error generating plan"
-            self.expansion_tile.controls = [ft.Text(f"{self.response_var}")]
-            self.update()
+    def task_status_change(self, task):
+        self.update()
+
+    def task_delete(self, task):
+        self.tasks.controls.remove(task)
+        self.update()
+
+
+def daily_tasks(page: ft.Page):
+    page.title = "Daily Tasks"
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.scroll = ft.ScrollMode.ADAPTIVE
+
+    page.add(DailyTasksApp(page))
 
 
 class TodoApp(ft.Column):
-    def __init__(self):
+    def __init__(self, drawer_button, drawer, page):
         super().__init__()
+
+        self.page = page
+
+        self.drawer_button = drawer_button
+        self.drawer = drawer
+
         self.new_task = ft.TextField(
             hint_text="What needs to be done?", on_submit=self.add_clicked, expand=True,
             border_color=ft.Colors.GREY
@@ -142,19 +175,17 @@ class TodoApp(ft.Column):
                 alignment=ft.MainAxisAlignment.CENTER,
             ),
             ft.Container(height=20),
-            ft.Container(
-                ft.Row(
-                    controls=[
-                        self.new_task,
-                        ft.FloatingActionButton(
-                            icon=ft.Icons.ADD,
-                            on_click=self.add_clicked,
-                            bgcolor='#ffa028',
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER
-                ),
-                padding=ft.Padding(top=20, left=20, right=20, bottom=20)
+            ft.Row(
+                controls=[
+                    self.drawer_button,
+                    self.new_task,
+                    ft.FloatingActionButton(
+                        icon=ft.Icons.ADD,
+                        on_click=self.add_clicked,
+                        bgcolor='#ffa028',
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START
             ),
             ft.Column(
                 spacing=25,
@@ -198,7 +229,7 @@ class TodoApp(ft.Column):
         self.update()
 
     def tabs_changed(self, e):
-        self.update()
+        pass
 
     def clear_clicked(self, e):
         for task in self.tasks.controls[:]:
@@ -224,11 +255,53 @@ def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.scroll = ft.ScrollMode.ADAPTIVE
 
+    drawer_button = ft.IconButton(icon=ft.Icons.MENU, on_click=lambda e: page.open(drawer))
+
+    drawer = ft.NavigationDrawer(
+        selected_index=0,
+        controls=[
+            ft.Container(height=12),
+            ft.NavigationDrawerDestination(
+                label="To-Do List",
+                icon=ft.Icons.LIST,
+                selected_icon=ft.Icon(ft.Icons.LIST_ALT),
+            ),
+            ft.Divider(thickness=2),
+            ft.NavigationDrawerDestination(
+                label="Daily Tasks",  # This is Item 2 now
+                icon=ft.Icons.DATE_RANGE,
+                selected_icon=ft.Icon(ft.Icons.DATE_RANGE),
+            ),
+            ft.NavigationDrawerDestination(
+                label="Switch Modes",  # Mode Switch
+                icon=ft.Icons.DARK_MODE_OUTLINED,
+            ),
+        ]
+    )
+
+    # Function to handle navigation when a drawer item is selected
+    def on_drawer_index_change(e):
+        selected_index = drawer.selected_index
+        if selected_index == 0:  # To-Do List selected
+            page.clean()  # Clear current content
+            page.add(TodoApp(drawer_button, drawer, page))  # Add To-Do list page
+        elif selected_index == 1:  # Daily Tasks selected
+            page.clean()  # Clear current content
+            daily_tasks(page)  # Add Daily Tasks page
+        elif selected_index == 2:  # Switch mode selected
+            if page.theme_mode == ft.ThemeMode.LIGHT:
+                page.theme_mode = ft.ThemeMode.DARK
+            else:
+                page.theme_mode = ft.ThemeMode.LIGHT
+            page.update()
+
+    drawer.on_change = on_drawer_index_change
+
+    # Add login or initial page if needed
     def on_login_success():
         page.clean()
-        page.add(TodoApp())
+        page.add(TodoApp(drawer_button, drawer, page))
 
     page.add(LoginPage(on_login_success=on_login_success))
-
 
 ft.app(main)
