@@ -1,18 +1,29 @@
-from openai import OpenAI
-import os
+import flet as ft
+from controls import TreeView
 
 
-API_KEY = os.environ.get('OPENAI_API_KEY', None)
-MODEL = "gpt-3.5-turbo"
+def main(page: ft.Page):
+    page.add(
+        TreeView(
+            {
+                ft.Checkbox("Security"): {
+                    ft.Checkbox("Firewall"): {
+                        ft.Checkbox("Local"): {},
+                        ft.Checkbox("Public"): {},
+                    },
+                    ft.Checkbox(label="Password Manager"): {},
+                    ft.Checkbox("Antivirus"): {},
+                },
+                ft.Checkbox("Dev", value=True): {
+                    ft.Checkbox(
+                        label="Show logs", on_change=lambda _: print("This is a test!")
+                    ): {},
+                    ft.Checkbox("Take Snapshot", value=True): {},
+                },
+            },
+            set_on_change=True,
+        )
+    )
 
-client = OpenAI(api_key=API_KEY)
-response = client.chat.completions.create(
-    model=MODEL,
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant. Create a detailed plan to achieve the given goal, breaking it down into actionable steps with a timeline. Make sure the plan is practical and achievable, including daily or weekly tasks, milestones, and any additional tips or resources that might be helpful. \
-            Give me the output in JSON format with goal as a key and the plan/steps as sub-keys."},
-        {"role": "user", "content": "meet Dhimant"}
-    ]
-)
 
-print("Assistant: " + response.choices[0].message.content)
+ft.app(target=main)

@@ -1,17 +1,19 @@
 import flet as ft
+import sqlite3
 import openai
 import os
 from login import LoginPage
 
 class Task(ft.Column):
-    def __init__(self, task_name, task_status_change, task_delete):
+    def __init__(self, task_name, task_status_change, task_delete, task_id=None, completed=False):
         super().__init__()
-        self.completed = False
+        self.task_id = task_id
+        self.completed = completed
         self.task_name = task_name
         self.task_status_change = task_status_change
         self.task_delete = task_delete
         self.display_task = ft.Checkbox(
-            value=False, label=self.task_name, on_change=self.status_changed, active_color=ft.Colors.PURPLE_ACCENT
+            value=self.completed, label=self.task_name, on_change=self.status_changed, active_color=ft.Colors.PURPLE_ACCENT
         )
         self.edit_name = ft.TextField(expand=1, border_color=ft.Colors.GREY)
 
@@ -82,18 +84,39 @@ class Task(ft.Column):
         self.edit_view.visible = False
         self.update()
 
+        # Update task name in the database
+        conn = sqlite3.connect("tasks.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE tasks SET task_name = ? WHERE id = ?", (self.display_task.label, self.task_id))
+        conn.commit()
+        conn.close()
+
     def status_changed(self, e):
         self.completed = self.display_task.value
         self.task_status_change(self)
 
+        # Update task status in the database
+        conn = sqlite3.connect("tasks.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE tasks SET completed = ? WHERE id = ?", (self.completed, self.task_id))
+        conn.commit()
+        conn.close()
+
     def delete_clicked(self, e):
         self.task_delete(self)
+
+        # Delete task from the database
+        conn = sqlite3.connect("tasks.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tasks WHERE id = ?", (self.task_id,))
+        conn.commit()
+        conn.close()
 
     def create_plan(self, e):
         API_KEY = os.environ.get('OPENAI_API_KEY', "dont-know")
         MODEL = "gpt-3.5-turbo"
 
-        openai.api_key = API_KEY  # Set the API key for OpenAI
+        openai.api_key = API_KEY
 
         try:
             response = openai.chat.completions.create(
@@ -105,7 +128,6 @@ class Task(ft.Column):
             )
             self.response_var = response.choices[0].message.content
 
-            # Update the display after receiving the response
             self.expansion_tile.controls = [ft.Text(f"{self.response_var}")]
             self.update()
 
@@ -116,7 +138,7 @@ class Task(ft.Column):
             self.update()
 
 class DailyTasksApp(ft.Column):
-    def __init__(self, page):
+    def __init__(self, page, drawer_button, drawer):
         super().__init__()
 
         self.page = page
@@ -126,7 +148,14 @@ class DailyTasksApp(ft.Column):
         )
         self.tasks = ft.Column()
 
+        self.drawer_button = drawer_button
+        self.drawer = drawer
+
+        # Load tasks from the database
+        self.load_tasks_from_db()
+
         self.controls = [
+            self.drawer_button,  # Add the drawer button for navigation
             ft.Row(
                 [ft.Text(value="Daily Tasks", theme_style=ft.TextThemeStyle.HEADLINE_MEDIUM, color=ft.Colors.PURPLE)],
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -145,9 +174,7 @@ class DailyTasksApp(ft.Column):
             ),
             ft.Column(
                 spacing=25,
-                controls=[
-                    self.tasks,
-                ],
+                controls=[self.tasks],
             ),
         ]
         self.width = 500
@@ -162,6 +189,13 @@ class DailyTasksApp(ft.Column):
             self.new_task.focus()
             self.update()
 
+            # Add the new task to the database
+            conn = sqlite3.connect("tasks.db")
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO tasks (task_name, completed) VALUES (?, ?)", (task.task_name, task.completed))
+            conn.commit()
+            conn.close()
+
     def task_status_change(self, task):
         self.update()
 
@@ -169,12 +203,63 @@ class DailyTasksApp(ft.Column):
         self.tasks.controls.remove(task)
         self.update()
 
+    def load_tasks_from_db(self):
+        conn = sqlite3.connect("tasks.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, task_name, completed FROM tasks")
+        rows = cursor.fetchall()
+        for row in rows:
+            task = Task(row[1], self.task_status_change, self.task_delete, task_id=row[0], completed=row[2])
+            self.tasks.controls.append(task)
+        conn.close()
+
 def daily_tasks(page: ft.Page):
     page.title = "Daily Tasks"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.scroll = ft.ScrollMode.ADAPTIVE
 
-    page.add(DailyTasksApp(page))
+    drawer_button = ft.IconButton(icon=ft.Icons.MENU, on_click=lambda e: page.open(drawer))
+
+    drawer = ft.NavigationDrawer(
+        selected_index=0,
+        controls=[
+            ft.Container(height=12),
+            ft.NavigationDrawerDestination(
+                label="To-Do List",
+                icon=ft.Icons.LIST,
+                selected_icon=ft.Icon(ft.Icons.LIST_ALT),
+            ),
+            ft.Divider(thickness=2),
+            ft.NavigationDrawerDestination(
+                label="Daily Tasks",
+                icon=ft.Icons.DATE_RANGE,
+                selected_icon=ft.Icon(ft.Icons.DATE_RANGE),
+            ),
+            ft.NavigationDrawerDestination(
+                label="Switch Modes",
+                icon=ft.Icons.DARK_MODE_OUTLINED,
+            ),
+        ]
+    )
+
+    def on_drawer_index_change(e):
+        selected_index = drawer.selected_index
+        if selected_index == 0:
+            page.clean()
+            page.add(TodoApp(drawer_button, drawer, page))
+        elif selected_index == 1:
+            page.clean()
+            daily_tasks(page)
+        elif selected_index == 2:
+            if page.theme_mode == ft.ThemeMode.LIGHT:
+                page.theme_mode = ft.ThemeMode.DARK
+            else:
+                page.theme_mode = ft.ThemeMode.LIGHT
+            page.update()
+
+    drawer.on_change = on_drawer_index_change
+
+    page.add(DailyTasksApp(page, drawer_button, drawer))
 
 class TodoApp(ft.Column):
     def __init__(self, drawer_button, drawer, page):
@@ -201,6 +286,7 @@ class TodoApp(ft.Column):
 
         self.width = 500
         self.controls = [
+            self.drawer_button,
             ft.Row(
                 [ft.Text(value="To-Do List", theme_style=ft.TextThemeStyle.HEADLINE_MEDIUM, color=ft.Colors.PURPLE)],
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -208,7 +294,6 @@ class TodoApp(ft.Column):
             ft.Container(height=20),
             ft.Row(
                 controls=[
-                    self.drawer_button,
                     self.new_task,
                     ft.FloatingActionButton(
                         icon=ft.Icons.ADD,
@@ -220,25 +305,11 @@ class TodoApp(ft.Column):
             ),
             ft.Column(
                 spacing=25,
-                controls=[
-                    self.filter,
-                    self.tasks,
-                    ft.Row(
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        controls=[
-                            self.items_left,
-                            ft.OutlinedButton(
-                                text="Clear completed", on_click=self.clear_clicked,
-                                style=ft.ButtonStyle(
-                                    padding=ft.Padding(left=20, right=20, top=10, bottom=10),
-                                    bgcolor=ft.Colors.ORANGE_ACCENT,
-                                    color=ft.Colors.BLACK
-                                )
-                            ),
-                        ],
-                    ),
-                ],
+                controls=[self.filter, self.tasks, ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[self.items_left, ft.OutlinedButton(text="Clear completed", on_click=self.clear_clicked)]
+                )],
             ),
         ]
         self.padding = ft.Padding(20, 20, 20, 20)
@@ -252,6 +323,13 @@ class TodoApp(ft.Column):
             self.new_task.focus()
             self.update()
 
+            # Add the new task to the database
+            conn = sqlite3.connect("tasks.db")
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO tasks (task_name, completed) VALUES (?, ?)", (task.task_name, task.completed))
+            conn.commit()
+            conn.close()
+
     def task_status_change(self, task):
         self.update()
 
@@ -260,6 +338,7 @@ class TodoApp(ft.Column):
         self.update()
 
     def tabs_changed(self, e):
+        """Handle tab change logic here."""
         pass
 
     def clear_clicked(self, e):
@@ -298,27 +377,26 @@ def main(page: ft.Page):
             ),
             ft.Divider(thickness=2),
             ft.NavigationDrawerDestination(
-                label="Daily Tasks",  # This is Item 2 now
+                label="Daily Tasks",
                 icon=ft.Icons.DATE_RANGE,
                 selected_icon=ft.Icon(ft.Icons.DATE_RANGE),
             ),
             ft.NavigationDrawerDestination(
-                label="Switch Modes",  # Mode Switch
+                label="Switch Modes",
                 icon=ft.Icons.DARK_MODE_OUTLINED,
             ),
         ]
     )
 
-    # Function to handle navigation when a drawer item is selected
     def on_drawer_index_change(e):
         selected_index = drawer.selected_index
-        if selected_index == 0:  # To-Do List selected
-            page.clean()  # Clear current content
-            page.add(TodoApp(drawer_button, drawer, page))  # Add To-Do list page
-        elif selected_index == 1:  # Daily Tasks selected
-            page.clean()  # Clear current content
-            daily_tasks(page)  # Add Daily Tasks page
-        elif selected_index == 2:  # Switch mode selected
+        if selected_index == 0:
+            page.clean()
+            page.add(TodoApp(drawer_button, drawer, page))
+        elif selected_index == 1:
+            page.clean()
+            daily_tasks(page)
+        elif selected_index == 2:
             if page.theme_mode == ft.ThemeMode.LIGHT:
                 page.theme_mode = ft.ThemeMode.DARK
             else:
@@ -327,7 +405,6 @@ def main(page: ft.Page):
 
     drawer.on_change = on_drawer_index_change
 
-    # Add login or initial page if needed
     def on_login_success():
         page.clean()
         page.add(TodoApp(drawer_button, drawer, page))
