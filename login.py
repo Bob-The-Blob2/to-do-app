@@ -1,20 +1,5 @@
 import flet as ft
-import json
-import os
-
-USERS_FILE = "users.json"
-
-def load_users():
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "r") as file:
-            return json.load(file)
-    return {}
-
-def save_users(users_db):
-    with open(USERS_FILE, "w") as file:
-        json.dump(users_db, file)
-
-users_db = load_users()
+import sqlite3
 
 class LoginPage(ft.Column):
     def __init__(self, on_login_success):
@@ -69,7 +54,7 @@ class LoginPage(ft.Column):
         username = self.username.value
         password = self.password.value
 
-        if username in users_db and users_db[username] == password:
+        if self.check_user_credentials(username, password):
             self.on_login_success()
         else:
             self.error_message.value = "Invalid username or password!"
@@ -80,11 +65,10 @@ class LoginPage(ft.Column):
         password = self.password.value
         
         if username and password:
-            if username in users_db:
+            if self.check_user_exists(username):
                 self.error_message.value = "Username already exists! Please choose a different one."
             else:
-                users_db[username] = password
-                save_users(users_db)
+                self.add_user_to_db(username, password)
                 self.error_message.value = "Account Created! You can now login."
                 self.is_registering = False
                 self.controls[0] = ft.Row([ft.Text("Login", theme_style=ft.TextThemeStyle.HEADLINE_MEDIUM)], alignment=ft.MainAxisAlignment.CENTER)
@@ -93,3 +77,27 @@ class LoginPage(ft.Column):
         else:
             self.error_message.value = "Username and Password are required!"
             self.update()
+
+    def check_user_exists(self, username):
+        conn = sqlite3.connect('tasks.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(1) FROM users WHERE username = ?", (username,))
+        exists = cursor.fetchone()[0] > 0
+        conn.close()
+        return exists
+
+    def check_user_credentials(self, username, password):
+        conn = sqlite3.connect('tasks.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
+        stored_password = cursor.fetchone()
+        conn.close()
+        
+        return stored_password and stored_password[0] == password
+
+    def add_user_to_db(self, username, password):
+        conn = sqlite3.connect('tasks.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+        conn.commit()
+        conn.close()

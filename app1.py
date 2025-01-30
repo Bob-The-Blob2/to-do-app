@@ -3,6 +3,21 @@ import sqlite3
 import openai
 import os
 from login import LoginPage
+from dotenv import load_dotenv
+
+conn = sqlite3.connect('tasks.db')
+cursor = conn.cursor()
+
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
+    )
+''')
+
+conn.commit()
+conn.close()
 
 class Task(ft.Column):
     def __init__(self, task_name, task_status_change, task_delete, task_id=None, completed=False):
@@ -31,7 +46,7 @@ class Task(ft.Column):
                     icon=ft.Icons.DELETE_OUTLINE
                 ),
                 ft.PopupMenuItem(
-                    text="Create schedule",
+                    text="Create plan",
                     on_click=self.create_plan,
                     icon=ft.Icons.DATE_RANGE
                 ),
@@ -113,6 +128,8 @@ class Task(ft.Column):
         conn.close()
 
     def create_plan(self, e):
+        load_dotenv(override = True)
+        
         API_KEY = os.environ.get('OPENAI_API_KEY', "dont-know")
         MODEL = "gpt-3.5-turbo"
 
@@ -122,7 +139,11 @@ class Task(ft.Column):
             response = openai.chat.completions.create(
                 model=MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Create a detailed plan to achieve the given goal, breaking it down into actionable steps with a timeline. Make sure the plan is practical and achievable, including daily or weekly tasks, milestones, and any additional tips or resources that might be helpful. Give me the output in YAML format with goal as a key and the plan/steps as sub-keys."},
+                    {"role": "system", "content": "You are a helpful assistant. Create a detailed plan to \
+                     achieve the given goal, breaking it down into actionable steps with a timeline. Make sure \
+                     the plan is practical and achievable, including daily or weekly tasks, milestones, and any \
+                     additional tips or resources that might be helpful. Format the output in a proffesional manner \
+                     goal as a key and the plan/steps as sub-keys."},
                     {"role": "user", "content": self.task_name}
                 ]
             )
@@ -338,8 +359,7 @@ class TodoApp(ft.Column):
         self.update()
 
     def tabs_changed(self, e):
-        """Handle tab change logic here."""
-        pass
+        self.update()
 
     def clear_clicked(self, e):
         for task in self.tasks.controls[:]:
@@ -352,7 +372,7 @@ class TodoApp(ft.Column):
         for task in self.tasks.controls:
             task.visible = (
                 status == "All"
-                or (status == "Active" and not task.completed)
+                or (status == "Active" and task.completed == False)
                 or (status == "Completed" and task.completed)
             )
             if not task.completed:
